@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Interaktiver Scatterplot mit Korrelationen</title>
+    <link href="https://cdn.jsdelivr.net/npm/jsxgraph/distrib/jsxgraph.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/jsxgraph/distrib/jsxgraphcore.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 40px;
+            margin-top: 20px;
+        }
+        .jxgbox { border: 1px solid #ccc; }
+        .controls { width: 600px; margin: 20px auto; text-align: center; }
+        .korrelation { font-size: 1.2em; margin-top: 12px; }
+        #koordinaten {
+            min-width: 200px;
+            background: #f5f5f5;
+            padding: 14px 18px;
+            border-radius: 10px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+            font-size: 1.08em;
+        }
+        #koordinaten h3 {
+            margin-top: 0;
+            font-size: 1.1em;
+            color: #1976d2;
+            margin-bottom: 8px;
+        }
+        #koordinaten ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        #koordinaten li {
+            font-family: "Fira Mono", "Consolas", monospace;
+            margin-bottom: 4px;
+        }
+        .arraylist {
+            margin-top: 18px;
+            font-family: "Fira Mono", "Consolas", monospace;
+            background: #eef3fa;
+            border-radius: 7px;
+            padding: 8px 10px;
+            font-size: 1em;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div>
+        <div id="jxgbox" class="jxgbox" style="width:800px; height:500px;"></div>
+        <div class="controls">
+            <div class="korrelation">
+                <span id="pearson"></span><br>
+                <span id="spearman"></span>
+            </div>
+            <button onclick="resetPoints()">Punkte zurücksetzen</button>
+        </div>
+    </div>
+    <div id="koordinaten">
+        <!-- Koordinaten und Arrays werden hier angezeigt -->
+    </div>
+</div>
+
+<script>
+// Hilfsfunktionen für Korrelationen
+function pearsonCorrelation(x, y) {
+    const n = x.length;
+    const meanX = x.reduce((a,b) => a+b, 0) / n;
+    const meanY = y.reduce((a,b) => a+b, 0) / n;
+    let num = 0, denX = 0, denY = 0;
+    for(let i=0;i<n;i++) {
+        num += (x[i]-meanX)*(y[i]-meanY);
+        denX += (x[i]-meanX)**2;
+        denY += (y[i]-meanY)**2;
+    }
+    return num / Math.sqrt(denX * denY);
+}
+
+// Gibt für ein Array die Rangliste zurück (z.B. [30,10,20] -> [3,1,2])
+function getRanks(arr) {
+    const sorted = [...arr].map((v,i) => [v,i]).sort((a,b) => a[0]-b[0]);
+    const ranks = Array(arr.length);
+    let rank = 1;
+    for(let i=0; i<sorted.length; i++) {
+        if(i>0 && sorted[i][0] === sorted[i-1][0]) {
+            ranks[sorted[i][1]] = ranks[sorted[i-1][1]];
+        } else {
+            ranks[sorted[i][1]] = rank;
+        }
+        rank++;
+    }
+    return ranks;
+}
+
+function spearmanCorrelation(x, y) {
+    const rx = getRanks(x);
+    const ry = getRanks(y);
+    return pearsonCorrelation(rx, ry);
+}
+
+// 10 zufällige Punkte
+function generateInitialPoints() {
+    let pts = [];
+    for (let i=0; i<10; i++) {
+        let x = -4 + 8*Math.random();
+        let y = -4 + 8*Math.random();
+        pts.push([x, y]);
+    }
+    return pts;
+}
+
+// JSXGraph Board einrichten
+let board = JXG.JSXGraph.initBoard('jxgbox', {
+    boundingbox: [-5, 5, 5, -5], axis:true, showCopyright:false, showNavigation:false
+});
+
+let points = [];
+function createPoints(arr) {
+    points = [];
+    for (let i=0; i<arr.length; i++) {
+        let p = board.create('point', arr[i], {
+            size:4, name:'', strokeColor:'#1976d2', fillColor:'#2196f3', withLabel:false, fixed:false
+        });
+        p.on('drag', updateCorrelations);
+        p.on('up', updateCorrelations);
+        points.push(p);
+    }
+}
+let initialPoints = generateInitialPoints();
+createPoints(initialPoints);
+
+// Korrelationen berechnen und anzeigen
+function updateCorrelations() {
+    let xs = points.map(p=>p.X());
+    let ys = points.map(p=>p.Y());
+    let pearson = pearsonCorrelation(xs, ys);
+    let spearman = spearmanCorrelation(xs, ys);
+    document.getElementById('pearson').innerHTML = `r<sub>Pearson</sub> = <b>${pearson.toFixed(3)}</b>`;
+    document.getElementById('spearman').innerHTML = `r<sub>Spearman</sub> = <b>${spearman.toFixed(3)}</b>`;
+    updateKoordinatenListe(xs, ys);
+}
+updateCorrelations();
+
+// Punkte zurücksetzen
+function resetPoints() {
+    for (let p of points) board.removeObject(p);
+    initialPoints = generateInitialPoints();
+    createPoints(initialPoints);
+    updateCorrelations();
+}
+
+// Koordinatenliste und Arrays anzeigen und aktualisieren
+function updateKoordinatenListe(xs, ys) {
+    let html = `<h3>Punkte (x, y):</h3><ul>`;
+    for(let i=0; i<xs.length; i++) {
+        html += `<li>P${i+1}: (${xs[i].toFixed(3)}, ${ys[i].toFixed(3)})</li>`;
+    }
+    html += `</ul>`;
+
+    // Arrays für X und Y
+    let arrX = xs.map(x => x.toFixed(3)).join(", ");
+    let arrY = ys.map(y => y.toFixed(3)).join(", ");
+    html += `<div class="arraylist">
+        x: [${arrX}]<br>
+        y: [${arrY}]
+    </div>`;
+    document.getElementById('koordinaten').innerHTML = html;
+}
+
+</script>
+</body>
+</html>
